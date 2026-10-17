@@ -1,0 +1,102 @@
+# No tokens live here: callers and approvers are identified by the SHA-256 of their
+# token. Generate a hash with:
+#   openssl rand -hex 32 > token.txt            # the secret you hand to the caller
+#   mcp-cloud-ops-gateway hash-token            # paste the token on stdin; prints the hash
+# The hashes below are PLACEHOLDERS and match no usable token. Replace before deploying.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mcp-gateway-config
+  namespace: mcp-gateway
+  labels:
+    app.kubernetes.io/name: mcp-cloud-ops-gateway
+data:
+  gateway.yaml: |
+    server:
+      name: mcp-cloud-ops-gateway
+      http_listen: 0.0.0.0:8080     # MCP; exposed by the mcp-gateway Service
+      admin_listen: 0.0.0.0:8081    # approvals; exposed only by mcp-gateway-admin Service
+    policy_file: /etc/mcp-gateway/policy.yaml
+    audit:
+      file: /var/lib/mcp-gateway/audit.jsonl
+      mirror_stderr: true           # so a log collector keeps the trail after the pod is gone
+    approvals:
+      pending_ttl: 15m
+      use_window: 5m
+      max_pending_per_principal: 20
+    principals:
+      - name: incident-bot
+        profile: readonly-agent
+        token_sha256: 0000000000000000000000000000000000000000000000000000000000000001
+      - name: ops-agent
+        profile: ops-agent
+        token_sha256: 0000000000000000000000000000000000000000000000000000000000000002
+    approvers:
+      - name: on-call-human
+        token_sha256: 0000000000000000000000000000000000000000000000000000000000000003
+    credentials:
+      cluster:
+        type: in_cluster
+    kubernetes:
+      read_credential: cluster
+      write_credential: cluster
+      max_log_lines: 500
+    limits:
+      command_timeout: 60s
+      max_output_bytes: 65536
+  policy.yaml: |
+    version: 1
+    default: deny
+
+    profiles:
+      readonly-agent:
+        description: Read cluster state, logs, alarms and plans. Never changes anything.
+        rules:
+          - tool: k8s_get
+            effect: allow
+          - tool: k8s_logs
+            effect: allow
+          - tool: k8s_*
+            effect: deny
+            when:
+              namespace: { in: [kube-system, kube-public, cert-manager, gatekeeper-system] }
+            reason: Platform namespaces are off limits to agents.
+          - tool: aws_ec2_describe_instances
+            effect: allow
+          - tool: aws_cloudwatch_alarms
+            effect: allow
+          - tool: azure_resource_list
+            effect: allow
+          - tool: terraform_plan
+            effect: allow
+
+      ops-agent:
+        description: Triage plus scale and restart, each change approved by a human. Dry runs need no approval.
+        extends: [readonly-agent]
+        rules:
+          - tool: k8s_scale
+            effect: allow
+          - tool: k8s_scale
+            effect: ask
+            when:
+              dry_run: { equals: "false" }
+          - tool: k8s_scale
+            effect: deny
+            when:
+              replicas: { max: 0 }
+              namespace: { glob: ["prod-*", "payments"] }
+            reason: Scaling a production workload to zero is an outage; a human does that, not an agent.
+          - tool: k8s_rollout_restart
+            effect: allow
+          - tool: k8s_rollout_restart
+            effect: ask
+            when:
+              dry_run: { equals: "false" }
+          - tool: k8s_delete_pod
+            effect: ask
+            when:
+              namespace: { glob: ["sandbox-*", "dev"] }
+          - tool: aws_ec2_reboot_instance
+            effect: ask
+          - tool: azure_vm_restart
+            effect: ask

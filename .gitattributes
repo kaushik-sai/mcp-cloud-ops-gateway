@@ -1,0 +1,10 @@
+# Keep line endings stable between Windows and Linux so scripts, YAML and JSON behave the same everywhere
+* text=auto eol=lf
+*.ps1 text eol=lf
+*.psm1 text eol=lf
+*.psd1 text eol=lf
+*.cmd text eol=crlf
+*.png binary
+*.jpg binary
+*.go text eol=lf
+*.sh text eol=lf

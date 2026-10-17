@@ -1,0 +1,70 @@
+# golangci-lint v2 configuration, used by CI (ci.yml) and scripts/Invoke-LocalChecks.ps1.
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - unused
+    - gosec
+    - revive
+    - misspell
+  settings:
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: increment-decrement
+        - name: var-declaration
+        - name: package-comments
+          disabled: true
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unreachable-code
+        - name: redefines-builtin-id
+        # Exported-comment rules are off on purpose: "exported" (comment form) is not listed.
+    staticcheck:
+      # Style and quick-fix suggestions are not gates; real bugs (SA*) and simplifications (S*) are.
+      checks: ["all", "-ST1000", "-ST1003", "-ST1005", "-ST1016", "-ST1020", "-ST1021", "-ST1022", "-QF1001", "-QF1003", "-QF1008"]
+  exclusions:
+    presets:
+      - comments
+      - std-error-handling
+    rules:
+      # Tests build fake credentials, temp files and fixtures; gosec findings there are noise.
+      - path: _test\.go
+        linters:
+          - gosec
+      # The admin subcommand calls the gateway URL the operator passes on the command line;
+      # gosec's taint analysis reports that as SSRF. It is the intended input, not a vulnerability.
+      - path: cmd/mcp-cloud-ops-gateway/main\.go
+        linters:
+          - gosec
+        text: "G704"
+      # A deliberately misspelled YAML key, to test that unknown fields are rejected.
+      - path: internal/policy/policy_test\.go
+        linters:
+          - misspell
+        text: "wehn"
+
+formatters:
+  enable:
+    - gofmt

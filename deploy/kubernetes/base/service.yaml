@@ -1,0 +1,30 @@
+# MCP traffic only. The admin (approval) API is a SEPARATE Service so that exposing
+# MCP (for example through an Ingress) never exposes approvals.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-gateway
+  namespace: mcp-gateway
+  labels:
+    app.kubernetes.io/name: mcp-cloud-ops-gateway
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: mcp-cloud-ops-gateway
+  ports:
+    - { name: mcp, port: 8080, targetPort: mcp }
+---
+# Approvals API, ClusterIP only. Never put this behind an Ingress or LoadBalancer.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-gateway-admin
+  namespace: mcp-gateway
+  labels:
+    app.kubernetes.io/name: mcp-cloud-ops-gateway
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: mcp-cloud-ops-gateway
+  ports:
+    - { name: admin, port: 8081, targetPort: admin }

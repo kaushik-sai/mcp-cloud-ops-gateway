@@ -1,0 +1,47 @@
+# Example config for local development against a kind or kwok cluster.
+# Holds no secrets: callers are listed by the SHA-256 of their token
+# (`mcp-cloud-ops-gateway hash-token`), and cloud credentials come from OIDC token files.
+server:
+  name: mcp-cloud-ops-gateway
+  http_listen: 127.0.0.1:8080     # MCP over streamable HTTP, bearer token required
+  admin_listen: 127.0.0.1:8081    # approval API, approver tokens only
+  stdio_principal: local-agent    # who a stdio client (Claude Code on this machine) acts as
+
+policy_file: policy.yaml
+
+audit:
+  file: audit.jsonl
+  mirror_stderr: false
+
+approvals:
+  pending_ttl: 15m
+  use_window: 5m
+  max_pending_per_principal: 20
+
+principals:
+  - name: local-agent
+    profile: ops-agent
+  - name: incident-bot
+    profile: readonly-agent
+    # sha256 of the example token "incident-bot-example-token-change-me-0000000000000000"
+    token_sha256: 6020d5c9e13c9c96240ac34086bcd20e1ea488f57c1284809da815abd57b7cf0
+
+approvers:
+  - name: on-call-human
+    # sha256 of the example token "approver-example-token-change-me-00000000000000000000"
+    token_sha256: 40f2ef4161a7e8cfce233cd120fbac2f58ac935976b426be450dffe441dc8f71
+
+credentials:
+  local-cluster:
+    type: kubeconfig
+    path: ~/.kube/config
+    context: kind-gw
+
+kubernetes:
+  read_credential: local-cluster
+  write_credential: local-cluster
+  max_log_lines: 500
+
+limits:
+  command_timeout: 60s
+  max_output_bytes: 65536

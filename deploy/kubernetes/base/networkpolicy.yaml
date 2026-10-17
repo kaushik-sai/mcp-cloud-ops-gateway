@@ -1,0 +1,49 @@
+# Default deny ingress for the gateway pod, then open exactly what is needed.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mcp-gateway
+  namespace: mcp-gateway
+  labels:
+    app.kubernetes.io/name: mcp-cloud-ops-gateway
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: mcp-cloud-ops-gateway
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # MCP: only pods labelled mcp-gateway/client="true" in this namespace.
+    # To allow clients from other namespaces, add a namespaceSelector + podSelector pair.
+    - from:
+        - podSelector:
+            matchLabels:
+              mcp-gateway/client: "true"
+      ports:
+        - { protocol: TCP, port: 8080 }
+    # Admin: only namespaces labelled mcp-gateway/approvers="true". Unlabelled = nobody.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              mcp-gateway/approvers: "true"
+      ports:
+        - { protocol: TCP, port: 8081 }
+  egress:
+    # DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    # kube-apiserver. NetworkPolicy cannot select the API server by name: it is not a pod,
+    # and its address (often a node or load balancer IP, port 443 or 6443) is cluster
+    # specific. This allows 443/6443 to any destination; tighten the ipBlock to your
+    # API server IP (`kubectl get endpoints kubernetes -n default`) where your CNI
+    # enforces it. Add AWS/Azure endpoints here if you use those tools.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - { protocol: TCP, port: 443 }
+        - { protocol: TCP, port: 6443 }

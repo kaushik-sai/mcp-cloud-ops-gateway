@@ -1,0 +1,16 @@
+# Build output
+/bin/
+/dist/
+*.test
+coverage.out
+
+# Runtime files: audit logs and local configs can hold real names and hashes.
+audit*.jsonl
+*.local.yaml
+.env
+*.pem
+*.key
+
+# Personal Claude Code settings
+.claude/settings.local.json
+CLAUDE.local.md
