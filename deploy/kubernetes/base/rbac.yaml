@@ -1,0 +1,88 @@
+# Two layers of control: the gateway policy (policy.yaml) is the FIRST gate and
+# decides per call what an agent may do. RBAC below is the HARD LIMIT: even a policy
+# bug or a compromised gateway cannot exceed it. One pod has one ServiceAccount, so
+# reads are cluster-wide while writes are limited to a single namespace.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mcp-gateway-read
+  labels:
+    app.kubernetes.io/name: mcp-cloud-ops-gateway
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, services, configmaps, events, persistentvolumeclaims, nodes, namespaces]
+    verbs: [get, list]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses]
+    verbs: [get, list]
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list]
+  - apiGroups: [policy]
+    resources: [poddisruptionbudgets]
+    verbs: [get, list]
+  # Secrets are deliberately absent.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mcp-gateway-read
+  labels:
+    app.kubernetes.io/name: mcp-cloud-ops-gateway
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: mcp-gateway-read
+subjects:
+  - kind: ServiceAccount
+    name: mcp-gateway
+    namespace: mcp-gateway
+---
+# Writes: only in the example app namespace "demo". Create one Role + RoleBinding
+# per namespace the gateway may change; never grant these cluster-wide.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo
+  labels:
+    app.kubernetes.io/name: demo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mcp-gateway-write
+  namespace: demo
+  labels:
+    app.kubernetes.io/name: mcp-cloud-ops-gateway
+rules:
+  # k8s_scale and k8s_rollout_restart
+  - apiGroups: [apps]
+    resources: [deployments, deployments/scale]
+    verbs: [patch]
+  # k8s_delete_pod
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mcp-gateway-write
+  namespace: demo
+  labels:
+    app.kubernetes.io/name: mcp-cloud-ops-gateway
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mcp-gateway-write
+subjects:
+  - kind: ServiceAccount
+    name: mcp-gateway
+    namespace: mcp-gateway

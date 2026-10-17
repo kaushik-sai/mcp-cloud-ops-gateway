@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(pwsh -NoProfile -File ./scripts/Invoke-LocalChecks.ps1 *)",
+      "Bash(pwsh ./scripts/Invoke-LocalChecks.ps1 *)",
+      "PowerShell(git status *)",
+      "PowerShell(git diff *)",
+      "PowerShell(git log *)",
+      "PowerShell(./scripts/Invoke-LocalChecks.ps1 *)",
+      "Bash(go build *)",
+      "Bash(go vet *)",
+      "Bash(go test *)",
+      "Bash(gofmt -l *)",
+      "PowerShell(go build *)",
+      "PowerShell(go vet *)",
+      "PowerShell(go test *)",
+      "PowerShell(gofmt -l *)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(gh pr create *)",
+      "Bash(gh release *)",
+      "PowerShell(git push *)",
+      "PowerShell(gh pr create *)",
+      "PowerShell(gh release *)",
+      "Edit(/.github/workflows/**)",
+      "Edit(/.github/CODEOWNERS)",
+      "Edit(/governance/**)",
+      "Edit(/.claude/settings.json)",
+      "Edit(/.claude/settings.local.json)",
+      "Edit(/.claude/hooks/**)",
+      "Edit(/examples/policy.yaml)",
+      "Edit(/deploy/**)",
+      "Edit(/internal/policy/**)",
+      "Edit(/internal/approval/**)"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/*.pfx)",
+      "Read(secrets/**)",
+      "Read(.secrets/**)",
+      "Bash(git push --force *)",
+      "Bash(git push * --force)",
+      "Bash(git push * --force *)",
+      "Bash(git push -f *)",
+      "Bash(git push * -f)",
+      "Bash(git push * -f *)",
+      "Bash(git reset --hard *)",
+      "Bash(rm -rf /)",
+      "Bash(rm -rf / *)",
+      "Bash(rm -rf ~)",
+      "Bash(rm -rf ~/)",
+      "Bash(rm -rf $HOME)",
+      "Bash(rm -fr /)",
+      "Bash(rm -fr ~)",
+      "Bash(sh)",
+      "Bash(bash)",
+      "Bash(zsh)",
+      "Bash(sh -s *)",
+      "Bash(bash -s *)",
+      "Bash(sudo sh)",
+      "Bash(sudo bash)",
+      "Bash(gh repo delete *)",
+      "Bash(gh api *-X DELETE*)",
+      "Bash(gh api *-XDELETE*)",
+      "Bash(gh api *--method DELETE*)",
+      "Bash(gh api *--method=DELETE*)",
+      "Bash(gh pr merge *)",
+      "PowerShell(git push --force *)",
+      "PowerShell(git push * --force)",
+      "PowerShell(git push * --force *)",
+      "PowerShell(git push -f *)",
+      "PowerShell(git push * -f)",
+      "PowerShell(git push * -f *)",
+      "PowerShell(git reset --hard *)",
+      "PowerShell(Invoke-Expression *)",
+      "PowerShell(gh repo delete *)",
+      "PowerShell(gh api *-X DELETE*)",
+      "PowerShell(gh api *--method DELETE*)",
+      "PowerShell(gh pr merge *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh",
+            "args": [
+              "-NoProfile",
+              "-NonInteractive",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/Invoke-GuardHook.ps1"
+            ],
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh",
+            "args": [
+              "-NoProfile",
+              "-NonInteractive",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/Invoke-GuardHook.ps1"
+            ],
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

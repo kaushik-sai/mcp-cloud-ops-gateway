@@ -1,0 +1,56 @@
+# pr-policy: the pull request itself must meet the policy in governance/policy.json:
+# a Conventional Commits title, the required body sections, an AI-assistance disclosure,
+# and a reviewable size. scripts/Test-PullRequest.ps1 holds the rules.
+# The job id is a required status check name in governance/policy.json; keep them in step.
+
+name: pr-policy
+
+# pull_request, never pull_request_target: this runs with the PR's own read-only token and no secrets.
+# edited re-runs the check when the title or body is fixed.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+# Read-only token: nothing here writes to the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  pr-policy:
+    name: pr-policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Depth 2 is enough: the merge commit and its first parent (the base) give the changed files.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      # The title and body are written by whoever opens the PR. They reach the script only through
+      # env, never pasted into the script text with ${{ }}, so they cannot inject commands.
+      - name: 'Policy: title, body and size'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          # The files the PR changes relative to its base: the merge commit against its first parent.
+          $files = @(git diff --name-only HEAD^1 HEAD)
+          if ($LASTEXITCODE -ne 0) { Write-Output '::error::Could not list the changed files.'; exit 1 }
+
+          # Dependabot writes its own PR body, so only its title is checked. The login cannot be
+          # taken by a person: names ending in [bot] belong to GitHub Apps.
+          $titleOnly = $env:PR_AUTHOR -eq 'dependabot[bot]'
+
+          ./scripts/Test-PullRequest.ps1 -Title $env:PR_TITLE -Body $env:PR_BODY -ChangedFiles $files.Count -TitleOnly:$titleOnly
+          if ($LASTEXITCODE -ne 0) { Write-Output '::error::The pull request does not meet the policy.'; exit 1 }

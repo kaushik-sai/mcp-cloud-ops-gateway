@@ -1,0 +1,229 @@
+# ci: the checks for every pull request and for main, on GitHub-hosted runners.
+#   lint:          gofmt, go vet and golangci-lint over every package.
+#   test:          go test with the race detector; coverage goes on the job summary and is kept as an artifact.
+#                  The e2e tests (build tag e2e, need a cluster) are not run here.
+#   build:         go build of the gateway binary and a docker build of the Dockerfile (not pushed).
+#   workflow-lint: actionlint (syntax) and zizmor (security) over .github/workflows.
+# The job ids are the required status check names in governance/policy.json; keep them in step.
+
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  # Runs on main too, so the README badge shows the state of main.
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Read-only token: nothing here writes to the repository.
+permissions:
+  contents: read
+
+# A new push to a PR cancels the run it replaces; runs on main always finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Pinned tool versions. golangci-lint and actionlint come from their official releases and must
+# match the SHA-256 each release publishes; zizmor is installed with pip hash checking (see
+# requirements/zizmor.txt). The Go toolchain version comes from go.mod.
+env:
+  GOLANGCI_LINT_VERSION: '2.15.0'
+  ACTIONLINT_VERSION: '1.7.12'
+  MODULE: github.com/kaushik-sai/mcp-cloud-ops-gateway
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # persist-credentials: false keeps the token out of .git/config for later steps.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: 'Lint: gofmt'
+        run: |
+          unformatted="$(gofmt -l .)"
+          {
+            echo '### gofmt'
+            echo
+            if [ -z "$unformatted" ]; then echo 'All files are formatted.'; else echo 'Not formatted (run gofmt -w):'; echo; while IFS= read -r f; do echo "- $f"; done <<< "$unformatted"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$unformatted" ]; then
+            echo "$unformatted"
+            echo '::error::gofmt: the files above are not formatted. Run gofmt -w.'
+            exit 1
+          fi
+          echo 'gofmt: all files formatted.'
+
+      - name: 'Lint: go vet'
+        run: go vet ./...
+
+      # The release tarball is checked against the SHA-256 the release publishes; a mismatch fails the job.
+      - name: 'Tools: pinned golangci-lint'
+        run: |
+          version="$GOLANGCI_LINT_VERSION"
+          name="golangci-lint-${version}-linux-amd64.tar.gz"
+          base="https://github.com/golangci/golangci-lint/releases/download/v${version}"
+          bin="$RUNNER_TEMP/bin"
+          mkdir -p "$bin"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$name" "$base/$name"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/golangci-lint-checksums.txt" "$base/golangci-lint-${version}-checksums.txt"
+          (cd "$RUNNER_TEMP" && awk -v n="$name" '$2 == n' golangci-lint-checksums.txt | sha256sum --check --strict -)
+          tar -xzf "$RUNNER_TEMP/$name" -C "$bin" --strip-components=1 "golangci-lint-${version}-linux-amd64/golangci-lint"
+          echo "$bin" >> "$GITHUB_PATH"
+          "$bin/golangci-lint" --version
+
+      - name: 'Lint: golangci-lint'
+        run: |
+          code=0
+          golangci-lint run ./... || code=$?
+          {
+            echo '### golangci-lint'
+            echo
+            if [ "$code" -eq 0 ]; then echo 'No findings.'; else echo "Findings (exit code $code): see the job log."; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$code" -ne 0 ]; then echo "::error::golangci-lint exited with code $code."; exit 1; fi
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      # No build tags: the e2e tests (tag e2e) need a cluster and stay out of CI.
+      - name: 'Test: go test -race'
+        run: |
+          code=0
+          go test -race -count=1 -coverprofile="$RUNNER_TEMP/coverage.out" ./... || code=$?
+          {
+            echo '### go test'
+            echo
+            if [ "$code" -eq 0 ]; then echo 'All tests passed.'; else echo "Tests failed (exit code $code): see the job log."; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$code" -ne 0 ]; then echo "::error::go test exited with code $code."; exit 1; fi
+
+      - name: 'Test: coverage'
+        run: |
+          total="$(go tool cover -func="$RUNNER_TEMP/coverage.out" | awk '/^total:/ { print $3 }')"
+          {
+            echo '### Coverage'
+            echo
+            echo "Total statement coverage: **${total}**"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Total statement coverage: ${total}"
+
+      # Keep the profile even when tests failed, so it can be downloaded from the run.
+      - name: 'Publish coverage'
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage
+          path: ${{ runner.temp }}/coverage.out
+          if-no-files-found: ignore
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # fetch-depth: 0 so git describe can find the latest tag for the version string.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: 'Build: gateway binary'
+        run: |
+          version="$(git describe --tags --always --dirty)"
+          mkdir -p "$RUNNER_TEMP/out"
+          go build -trimpath \
+            -ldflags "-s -w -X ${MODULE}/internal/gateway.Version=${version}" \
+            -o "$RUNNER_TEMP/out/mcp-cloud-ops-gateway" ./cmd/mcp-cloud-ops-gateway
+          size="$(stat -c %s "$RUNNER_TEMP/out/mcp-cloud-ops-gateway")"
+          {
+            echo '### Build'
+            echo
+            echo "- Version: \`${version}\`"
+            echo "- Binary size: ${size} bytes"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Built version ${version}, ${size} bytes."
+
+      # Builds the image to prove the Dockerfile works. Nothing is pushed and no registry login happens.
+      - name: 'Build: docker image (not pushed)'
+        run: |
+          docker build --tag mcp-cloud-ops-gateway:ci .
+          echo '- Docker image: built, not pushed' >> "$GITHUB_STEP_SUMMARY"
+
+  workflow-lint:
+    name: workflow-lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The release tarball is checked against the SHA-256 the release publishes; a mismatch fails the job.
+      - name: 'Tools: pinned actionlint'
+        run: |
+          version="$ACTIONLINT_VERSION"
+          name="actionlint_${version}_linux_amd64.tar.gz"
+          base="https://github.com/rhysd/actionlint/releases/download/v${version}"
+          bin="$RUNNER_TEMP/bin"
+          mkdir -p "$bin"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$name" "$base/$name"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/actionlint-checksums.txt" "$base/actionlint_${version}_checksums.txt"
+          (cd "$RUNNER_TEMP" && awk -v n="$name" '$2 == n' actionlint-checksums.txt | sha256sum --check --strict -)
+          tar -xzf "$RUNNER_TEMP/$name" -C "$bin" actionlint
+          echo "$bin" >> "$GITHUB_PATH"
+          "$bin/actionlint" -version
+
+      # Hash-pinned install into a throwaway virtualenv: pip refuses any file whose hash differs.
+      - name: 'Tools: pinned zizmor'
+        run: |
+          venv="$RUNNER_TEMP/zizmor-venv"
+          python3 -m venv "$venv"
+          "$venv/bin/pip" install --require-hashes --no-deps --quiet -r .github/requirements/zizmor.txt
+          echo "$venv/bin" >> "$GITHUB_PATH"
+
+      - name: 'Lint: actionlint'
+        run: |
+          if ! actionlint -color; then echo '::error::actionlint found problems in the workflows.'; exit 1; fi
+          echo 'actionlint: no findings.'
+
+      # --offline: no token and no network, so only the static audits run; that is enough to catch
+      # template injection, unpinned actions, excessive permissions and credential persistence.
+      # Any finding at any severity fails the job.
+      - name: 'Lint: zizmor'
+        run: |
+          code=0
+          zizmor --offline --min-severity informational .github/workflows || code=$?
+          {
+            echo '### zizmor'
+            echo
+            if [ "$code" -eq 0 ]; then echo 'No findings.'; else echo 'Findings: see the job log.'; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$code" -ne 0 ]; then echo "::error::zizmor reported findings (exit code $code)."; exit 1; fi

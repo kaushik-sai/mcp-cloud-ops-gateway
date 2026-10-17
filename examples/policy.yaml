@@ -1,0 +1,66 @@
+# Example policy for mcp-cloud-ops-gateway.
+#
+# Every rule that matches a call is collected and the most restrictive effect wins:
+# deny beats ask, ask beats allow. A call no rule matches gets `default` (deny).
+# Conditions (`when`) match the tool's arguments after defaults are filled in,
+# for example namespace "default" when the agent leaves it out.
+version: 1
+default: deny
+
+profiles:
+  # Read-only triage: an incident bot or a chat assistant.
+  readonly-agent:
+    description: Read cluster state, logs, alarms and plans. Never changes anything.
+    rules:
+      - tool: k8s_get
+        effect: allow
+      - tool: k8s_logs
+        effect: allow
+      - tool: k8s_*
+        effect: deny
+        when:
+          namespace: { in: [kube-system, kube-public, cert-manager, gatekeeper-system] }
+        reason: Platform namespaces are off limits to agents.
+      - tool: aws_ec2_describe_instances
+        effect: allow
+      - tool: aws_cloudwatch_alarms
+        effect: allow
+      - tool: azure_resource_list
+        effect: allow
+      - tool: terraform_plan
+        effect: allow
+
+  # On-call operator agent: everything the reader can do, plus changes with a human in the loop.
+  ops-agent:
+    description: Triage plus scale and restart, each change approved by a human. Dry runs need no approval.
+    extends: [readonly-agent]
+    rules:
+      # Dry runs are free; real changes need a human. The ask rule only matches real runs,
+      # so the allow rule decides dry runs.
+      - tool: k8s_scale
+        effect: allow
+      - tool: k8s_scale
+        effect: ask
+        when:
+          dry_run: { equals: "false" }
+      - tool: k8s_scale
+        effect: deny
+        when:
+          replicas: { max: 0 }
+          namespace: { glob: ["prod-*", "payments"] }
+        reason: Scaling a production workload to zero is an outage; a human does that, not an agent.
+      - tool: k8s_rollout_restart
+        effect: allow
+      - tool: k8s_rollout_restart
+        effect: ask
+        when:
+          dry_run: { equals: "false" }
+      # Deleting pods only in sandbox namespaces, and still with approval.
+      - tool: k8s_delete_pod
+        effect: ask
+        when:
+          namespace: { glob: ["sandbox-*", "dev"] }
+      - tool: aws_ec2_reboot_instance
+        effect: ask
+      - tool: azure_vm_restart
+        effect: ask

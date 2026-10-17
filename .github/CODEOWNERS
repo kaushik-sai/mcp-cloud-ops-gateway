@@ -1,0 +1,18 @@
+# Code owners: a PR that touches these paths needs a review from the owner (the ruleset
+# sets require_code_owner_review). Replace @kaushik-sai with a team (for example
+# @your-org/platform-team) when the project has more than one maintainer.
+
+# Default owner for everything.
+*                       @kaushik-sai
+
+# Governance, CI and agent guardrails: changes here change what every PR is checked against.
+/.github/               @kaushik-sai
+/governance/            @kaushik-sai
+/SECURITY.md            @kaushik-sai
+
+# The control plane: what the gateway allows, what needs a human approval, and how it ships.
+/examples/policy.yaml   @kaushik-sai
+/deploy/                @kaushik-sai
+/Dockerfile             @kaushik-sai
+/internal/policy/       @kaushik-sai
+/internal/approval/     @kaushik-sai

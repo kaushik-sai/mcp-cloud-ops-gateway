@@ -1,0 +1,37 @@
+name: Bug report
+description: Something does not work as documented.
+title: "fix: "
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: Do not paste secrets, tokens or internal hostnames (redact kubeconfigs and cloud credentials). Security problems go through private reporting (see SECURITY.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, including the exact error message.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The commands you ran, in order.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Go version, gateway version (mcp-cloud-ops-gateway --version or git describe), MCP client, Kubernetes/cloud provider.
+      placeholder: Ubuntu 24.04, go1.25.0, v0.1.0, Claude Desktop, kind v0.24
+    validations:
+      required: true

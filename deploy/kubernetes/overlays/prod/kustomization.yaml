@@ -1,0 +1,27 @@
+# prod overlay: the image from your registry, pinned by digest, and production-only settings.
+# Copy this folder per environment (prod-eu, prod-us) and change only what differs.
+#   kubectl apply -k deploy/kubernetes/overlays/prod
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+images:
+  - name: mcp-cloud-ops-gateway
+    newName: ghcr.io/kaushik-sai/mcp-cloud-ops-gateway
+    # Replace with the digest your release pipeline publishes. A tag can be moved; a digest cannot.
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+labels:
+  - pairs:
+      app.kubernetes.io/instance: mcp-gateway-prod
+patches:
+  # Production principals, approvers and credentials live in a prod copy of the config.
+  # Generate it from base/configmap.yaml, then point this patch at it. Example: annotate the
+  # service account for AWS IRSA so aws_web_identity gets a projected token for the reader role.
+  - patch: |-
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: mcp-gateway
+        namespace: mcp-gateway
+        annotations:
+          eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/mcp-gateway-reader
