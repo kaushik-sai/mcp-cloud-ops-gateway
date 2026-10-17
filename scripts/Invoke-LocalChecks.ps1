@@ -40,7 +40,7 @@ function Get-LocalCheck {
     [pscustomobject] @{ Name = 'vet'; Tool = 'go'; Install = $goInstall }
     [pscustomobject] @{ Name = 'golangci-lint'; Tool = 'golangci-lint'; Install = 'brew install golangci-lint or go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest; https://golangci-lint.run/welcome/install/' }
     [pscustomobject] @{ Name = 'test'; Tool = 'go'; Install = $goInstall }
-    [pscustomobject] @{ Name = 'govulncheck'; Tool = 'govulncheck'; Install = 'go install golang.org/x/vuln/cmd/govulncheck@latest' }
+    [pscustomobject] @{ Name = 'govulncheck'; Tool = 'govulncheck'; Install = 'go install golang.org/x/vuln/cmd/govulncheck@v1.7.0' }
     [pscustomobject] @{ Name = 'actionlint'; Tool = 'actionlint'; Install = 'brew install actionlint or winget install rhysd.actionlint; https://github.com/rhysd/actionlint' }
     [pscustomobject] @{ Name = 'gitleaks'; Tool = 'gitleaks'; Install = 'brew install gitleaks or winget install gitleaks.gitleaks; https://github.com/gitleaks/gitleaks' }
 }

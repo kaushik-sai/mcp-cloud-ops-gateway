@@ -11,3 +11,9 @@ paths = [
   '''internal/.*_test\.go''',
   '''(^|/)testdata/.*''',
 ]
+
+[[allowlists]]
+description = "Example token hashes in examples/gateway.yaml: SHA-256 of public demo tokens shown in the comments, not secrets"
+condition = "AND"
+paths = ['''^examples/gateway\.yaml$''']
+regexes = ['''^[0-9a-f]{64}$''']

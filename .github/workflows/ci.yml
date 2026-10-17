@@ -58,7 +58,7 @@ jobs:
           {
             echo '### gofmt'
             echo
-            if [ -z "$unformatted" ]; then echo 'All files are formatted.'; else echo 'Not formatted (run gofmt -w):'; echo; echo "$unformatted" | sed 's/^/- /'; fi
+            if [ -z "$unformatted" ]; then echo 'All files are formatted.'; else echo 'Not formatted (run gofmt -w):'; echo; while IFS= read -r f; do echo "- $f"; done <<< "$unformatted"; fi
           } >> "$GITHUB_STEP_SUMMARY"
           if [ -n "$unformatted" ]; then
             echo "$unformatted"
